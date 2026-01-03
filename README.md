@@ -12,6 +12,7 @@ GRC（Governance, Risk, Compliance）SaaSアプリケーション。
 | UIライブラリ | React 19 | コンポーネントベースのUIライブラリ |
 | スタイリング | Tailwind CSS 4 | ユーティリティファーストのCSSフレームワーク |
 | データベース | PostgreSQL 17 | オープンソースのリレーショナルDB |
+| ORM | Prisma 6 | 型安全なデータベースクライアント |
 | ランタイム | Node.js 22 | JavaScript実行環境 |
 
 ---
@@ -158,6 +159,10 @@ make clean
 | `make ps` | コンテナ状態確認 |
 | `make db` | DBのみ起動 |
 | `make clean` | 停止 + ボリューム削除 |
+| `make migrate` | マイグレーション実行 |
+| `make migrate-create NAME=xxx` | 新規マイグレーション作成 |
+| `make migrate-reset` | DBリセット + 全マイグレーション実行 |
+| `make prisma-studio` | Prisma Studio（DB GUI）起動 |
 
 ---
 
@@ -202,13 +207,105 @@ docker exec -it grc-ts-db-1 psql -U grc -d grc
 
 ---
 
+## Prisma（データベース）
+
+### Prisma とは？
+
+**Prisma**は、Node.js/TypeScript向けの型安全なORMです。
+
+Goの`sqlc`や`ent`に近い立ち位置で、スキーマ定義からクライアントコードを自動生成します。
+
+### ファイル構成
+
+```
+backend/
+├── prisma/
+│   ├── schema.prisma      # スキーマ定義
+│   └── migrations/        # マイグレーションファイル
+├── prisma.config.ts       # Prisma設定
+└── .env                   # DATABASE_URL
+```
+
+### schema.prisma の書き方
+
+```prisma
+// モデル定義（Goのstructに相当）
+model User {
+  id        String   @id @default(uuid())  // 主キー、UUID自動生成
+  email     String   @unique               // ユニーク制約
+  name      String
+  posts     Post[]                         // リレーション（1対多）
+  createdAt DateTime @default(now()) @map("created_at")  // カラム名をスネークケースに
+
+  @@map("users")  // テーブル名をスネークケースに
+}
+
+model Post {
+  id       String @id @default(uuid())
+  title    String
+  authorId String @map("author_id")
+  author   User   @relation(fields: [authorId], references: [id])
+
+  @@map("posts")
+}
+```
+
+### よく使うコマンド
+
+```bash
+# マイグレーション作成 + 適用（開発時）
+make migrate-create NAME=add_posts_table
+
+# マイグレーション適用のみ（本番デプロイ時）
+make migrate
+
+# DBリセット（全データ削除 + マイグレーション再実行）
+make migrate-reset
+
+# Prisma Studio起動（ブラウザでDBを確認・編集）
+make prisma-studio
+```
+
+### Prisma Client の使い方
+
+```typescript
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+// 作成
+const user = await prisma.user.create({
+  data: {
+    email: 'alice@example.com',
+    name: 'Alice',
+  },
+});
+
+// 検索
+const users = await prisma.user.findMany({
+  where: { name: { contains: 'Ali' } },
+});
+
+// 更新
+await prisma.user.update({
+  where: { id: 'xxx' },
+  data: { name: 'Alice Updated' },
+});
+
+// 削除
+await prisma.user.delete({
+  where: { id: 'xxx' },
+});
+```
+
+---
+
 ## 次のステップ
 
 1. **バックエンドのディレクトリ構造作成** - レイヤードアーキテクチャに沿った構造
-2. **DBマイグレーション設定** - TypeORMまたはPrismaの導入
-3. **エンティティ作成** - ドメインモデルの定義
-4. **API実装** - コントローラー、サービスの実装
-5. **フロントエンド実装** - 画面の作成
+2. **エンティティ作成** - ドメインモデルの定義
+3. **API実装** - コントローラー、サービスの実装
+4. **フロントエンド実装** - 画面の作成
 
 ---
 
@@ -219,3 +316,4 @@ docker exec -it grc-ts-db-1 psql -U grc -d grc
 - [Next.js公式ドキュメント](https://nextjs.org/docs)
 - [React公式ドキュメント](https://react.dev/)
 - [Tailwind CSS公式ドキュメント](https://tailwindcss.com/docs)
+- [Prisma公式ドキュメント](https://www.prisma.io/docs)

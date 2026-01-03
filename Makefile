@@ -1,4 +1,4 @@
-.PHONY: help up up-build down restart logs ps db clean
+.PHONY: help up up-build down restart logs ps db clean migrate migrate-create migrate-reset prisma-studio
 
 # Default target
 help:
@@ -15,6 +15,12 @@ help:
 	@echo "Development:"
 	@echo "  db        - Start only database"
 	@echo "  clean     - Stop all and remove volumes"
+	@echo ""
+	@echo "Database:"
+	@echo "  migrate        - Run pending migrations"
+	@echo "  migrate-create - Create a new migration (NAME=xxx)"
+	@echo "  migrate-reset  - Reset database and run all migrations"
+	@echo "  prisma-studio  - Open Prisma Studio (DB GUI)"
 
 # Docker Compose commands
 up:
@@ -41,3 +47,16 @@ db:
 
 clean:
 	docker compose down -v
+
+# Database commands
+migrate:
+	docker compose exec backend npx prisma migrate deploy
+
+migrate-create:
+	docker compose exec backend npx prisma migrate dev --name $(NAME)
+
+migrate-reset:
+	docker compose exec backend npx prisma migrate reset --force
+
+prisma-studio:
+	docker compose exec backend npx prisma studio
