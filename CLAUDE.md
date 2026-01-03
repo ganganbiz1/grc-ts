@@ -45,6 +45,16 @@ make migrate-reset        # DBリセット + 全マイグレーション再実�
 make prisma-studio        # Prisma Studio（DB GUI）起動
 ```
 
+## 設計ドキュメント
+
+設計に関するドキュメントは `docs/design/` に格納:
+
+```
+docs/design/
+├── backend/      # バックエンド設計
+└── frontend/     # フロントエンド設計
+```
+
 ## アーキテクチャ
 
 - レイヤードアーキテクチャ + DDD
