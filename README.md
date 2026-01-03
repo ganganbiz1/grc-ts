@@ -113,6 +113,26 @@ backend/src/
 
 - Docker Desktop がインストールされていること
 
+### 重要: npm/npxコマンドはDockerコンテナ内で実行
+
+このプロジェクトでは、`npm`や`npx`コマンドは**必ずDockerコンテナ内で実行**してください。
+
+```bash
+# NG: ローカルで直接実行しない
+npm install xxx
+npx prisma migrate dev
+
+# OK: docker compose exec 経由で実行
+docker compose exec backend npm install xxx
+docker compose exec frontend npm install xxx
+docker compose exec backend npx prisma migrate dev
+```
+
+**理由:**
+- node_modulesがDockerコンテナ内のボリュームにマウントされている
+- ローカルとコンテナでNode.jsのバージョンが異なる可能性がある
+- 環境依存の問題を避けるため
+
 ### 起動方法
 
 ```bash
