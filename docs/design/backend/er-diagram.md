@@ -14,6 +14,10 @@
 - 監査用カラム（created_at, updated_at）は全テーブルに付与
 - テーブル名・カラム名は snake_case
 - predecessorIds は別テーブル `framework_control_predecessors` で正規化
+- **ENUM型は使用しない** → VARCHAR(255)を使用
+  - PostgreSQLのENUM型は`ALTER TYPE`で値を追加・変更する際にテーブル全体がロックされる
+  - 本番環境での無停止マイグレーションが困難になるため、VARCHAR + アプリ層バリデーションで対応
+  - 許容値はコメントで明記（例：`status: DRAFT | ACTIVE | ARCHIVED`）
 
 ---
 

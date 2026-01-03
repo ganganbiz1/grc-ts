@@ -6,13 +6,302 @@ datasource db {
   provider = "postgresql"
 }
 
-// サンプルモデル（後で実際のドメインモデルに置き換え）
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+// =============================================================================
+// Framework境界（共通マスタ）
+// =============================================================================
 
-  @@map("users")
+/// 規格マスタ（SOC2、ISO27001、ISMAP等）
+model Framework {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  versions FrameworkVersion[]
+
+  @@map("frameworks")
+}
+
+/// 規格の版管理
+/// status: DRAFT | ACTIVE | ARCHIVED
+model FrameworkVersion {
+  id            String    @id @default(uuid())
+  frameworkId   String    @map("framework_id")
+  version       String    @db.VarChar(50)
+  status        String    @default("DRAFT") @db.VarChar(255)
+  effectiveDate DateTime? @map("effective_date") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  framework  Framework             @relation(fields: [frameworkId], references: [id])
+  categories RequirementCategory[]
+  controls   FrameworkControl[]
+
+  @@map("framework_versions")
+}
+
+/// 章・ドメイン・カテゴリ
+model RequirementCategory {
+  id                 String   @id @default(uuid())
+  frameworkVersionId String   @map("framework_version_id")
+  parentId           String?  @map("parent_id")
+  name               String   @db.VarChar(200)
+  displayOrder       Int      @default(0) @map("display_order")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  frameworkVersion FrameworkVersion      @relation(fields: [frameworkVersionId], references: [id])
+  parent           RequirementCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children         RequirementCategory[] @relation("CategoryHierarchy")
+  requirements     Requirement[]
+
+  @@map("requirement_categories")
+}
+
+/// 規格本文上の要求（意味単位）
+model Requirement {
+  id           String   @id @default(uuid())
+  categoryId   String   @map("category_id")
+  code         String   @db.VarChar(50)
+  title        String   @db.VarChar(255)
+  text         String?  @db.Text
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  category RequirementCategory @relation(fields: [categoryId], references: [id])
+  controls FrameworkControl[]
+
+  @@map("requirements")
+}
+
+/// 規格上の実施項目定義
+/// mappingPolicy: AUTO_MIGRATE | MANUAL_REVIEW | DEPRECATED
+model FrameworkControl {
+  id                 String   @id @default(uuid())
+  requirementId      String   @map("requirement_id")
+  frameworkVersionId String   @map("framework_version_id")
+  canonicalKey       String   @unique @map("canonical_key") @db.VarChar(100)
+  displayCode        String   @map("display_code") @db.VarChar(50)
+  title              String   @db.VarChar(255)
+  text               String?  @db.Text
+  contentHash        String?  @map("content_hash") @db.VarChar(64)
+  mappingPolicy      String   @default("MANUAL_REVIEW") @map("mapping_policy") @db.VarChar(255)
+  displayOrder       Int      @default(0) @map("display_order")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  requirement      Requirement                   @relation(fields: [requirementId], references: [id])
+  frameworkVersion FrameworkVersion              @relation(fields: [frameworkVersionId], references: [id])
+  predecessors     FrameworkControlPredecessor[] @relation("NewVersion")
+  successors       FrameworkControlPredecessor[] @relation("OldVersion")
+  controlMappings  ControlFrameworkMapping[]
+
+  @@map("framework_controls")
+}
+
+/// FrameworkControlの前版との対応（改訂引き継ぎ用）
+/// status: SUGGESTED | CONFIRMED | REJECTED
+model FrameworkControlPredecessor {
+  id                 String   @id @default(uuid())
+  frameworkControlId String   @map("framework_control_id")
+  predecessorId      String   @map("predecessor_id")
+  status             String   @default("SUGGESTED") @db.VarChar(255)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  frameworkControl FrameworkControl @relation("NewVersion", fields: [frameworkControlId], references: [id])
+  predecessor      FrameworkControl @relation("OldVersion", fields: [predecessorId], references: [id])
+
+  @@unique([frameworkControlId, predecessorId])
+  @@map("framework_control_predecessors")
+}
+
+// =============================================================================
+// Control境界（テナント固有）
+// =============================================================================
+
+/// テナントの運用管理対象
+/// status: NOT_STARTED | IN_PROGRESS | COMPLETED
+model Control {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  name         String   @db.VarChar(200)
+  description  String?  @db.Text
+  status       String   @default("NOT_STARTED") @db.VarChar(255)
+  ownerId      String?  @map("owner_id")
+  note         String?  @db.Text
+  customFields Json?    @map("custom_fields")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  frameworkMappings ControlFrameworkMapping[]
+  evidenceMappings  ControlEvidenceMapping[]
+  testMappings      ControlTestMapping[]
+  policyMappings    ControlPolicyMapping[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("controls")
+}
+
+/// Control ↔ FrameworkControl（多:多）
+model ControlFrameworkMapping {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  controlId          String   @map("control_id")
+  frameworkControlId String   @map("framework_control_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  control          Control          @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  frameworkControl FrameworkControl @relation(fields: [frameworkControlId], references: [id])
+
+  @@unique([controlId, frameworkControlId])
+  @@index([tenantId])
+  @@map("control_framework_mappings")
+}
+
+/// Control ↔ Evidence（多:多）
+model ControlEvidenceMapping {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  controlId  String   @map("control_id")
+  evidenceId String   @map("evidence_id")
+  note       String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  control  Control  @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  evidence Evidence @relation(fields: [evidenceId], references: [id])
+
+  @@unique([controlId, evidenceId])
+  @@index([tenantId])
+  @@map("control_evidence_mappings")
+}
+
+/// Control ↔ Test（多:多）
+model ControlTestMapping {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  controlId String   @map("control_id")
+  testId    String   @map("test_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  control Control @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  // test Test @relation(fields: [testId], references: [id]) // 将来実装
+
+  @@unique([controlId, testId])
+  @@index([tenantId])
+  @@map("control_test_mappings")
+}
+
+/// Control ↔ Policy（多:多）
+model ControlPolicyMapping {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  controlId String   @map("control_id")
+  policyId  String   @map("policy_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  control Control @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  policy  Policy  @relation(fields: [policyId], references: [id])
+
+  @@unique([controlId, policyId])
+  @@index([tenantId])
+  @@map("control_policy_mappings")
+}
+
+// =============================================================================
+// Evidence境界（テナント固有）
+// =============================================================================
+
+/// 証跡の論理単位
+model Evidence {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  name        String   @db.VarChar(200)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  artifacts       EvidenceArtifact[]
+  controlMappings ControlEvidenceMapping[]
+
+  @@index([tenantId])
+  @@map("evidences")
+}
+
+/// ファイル/URL/スナップショット等の実体
+/// artifactType: FILE | URL | SNAPSHOT
+model EvidenceArtifact {
+  id           String    @id @default(uuid())
+  evidenceId   String    @map("evidence_id")
+  artifactType String    @map("artifact_type") @db.VarChar(255)
+  filePath     String?   @map("file_path") @db.VarChar(500)
+  url          String?   @db.VarChar(2000)
+  hash         String?   @db.VarChar(64)
+  sizeBytes    BigInt?   @map("size_bytes")
+  collectedAt  DateTime? @map("collected_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  evidence Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@map("evidence_artifacts")
+}
+
+// =============================================================================
+// Policy境界（テナント固有）
+// =============================================================================
+
+/// 社内規程
+model Policy {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  name        String   @db.VarChar(200)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  revisions       PolicyRevision[]
+  controlMappings ControlPolicyMapping[]
+
+  @@index([tenantId])
+  @@map("policies")
+}
+
+/// 改訂・版
+/// status: DRAFT | ACTIVE | ARCHIVED
+model PolicyRevision {
+  id            String    @id @default(uuid())
+  policyId      String    @map("policy_id")
+  version       String    @db.VarChar(50)
+  status        String    @default("DRAFT") @db.VarChar(255)
+  effectiveDate DateTime? @map("effective_date") @db.Date
+  content       String?   @db.Text
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  policy   Policy          @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  sections PolicySection[]
+
+  @@map("policy_revisions")
+}
+
+/// 章・条・項
+model PolicySection {
+  id               String   @id @default(uuid())
+  policyRevisionId String   @map("policy_revision_id")
+  parentId         String?  @map("parent_id")
+  sectionNumber    String   @map("section_number") @db.VarChar(255)
+  title            String   @db.VarChar(200)
+  content          String?  @db.Text
+  displayOrder     Int      @default(0) @map("display_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  policyRevision PolicyRevision  @relation(fields: [policyRevisionId], references: [id], onDelete: Cascade)
+  parent         PolicySection?  @relation("SectionHierarchy", fields: [parentId], references: [id])
+  children       PolicySection[] @relation("SectionHierarchy")
+
+  @@map("policy_sections")
 }
