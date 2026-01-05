@@ -1,0 +1,390 @@
+openapi: 3.0.3
+info:
+  title: GRC Platform - Framework API
+  description: |
+    規格（Framework）管理API
+
+    SOC2、ISO27001、ISMAP等のコンプライアンス規格を管理するためのAPIです。
+  version: 1.0.0
+  contact:
+    name: GRC Platform Team
+
+servers:
+  - url: http://localhost:3001/api
+    description: ローカル開発環境
+
+tags:
+  - name: Framework
+    description: 規格管理
+
+paths:
+  /frameworks:
+    get:
+      tags:
+        - Framework
+      summary: 規格一覧取得
+      description: 登録されている全ての規格を取得する
+      operationId: listFrameworks
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FrameworkSummary'
+
+    post:
+      tags:
+        - Framework
+      summary: 規格作成
+      description: 新しい規格を作成する
+      operationId: createFramework
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFrameworkRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrameworkIdResponse'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /frameworks/{id}:
+    get:
+      tags:
+        - Framework
+      summary: 規格詳細取得
+      description: 指定したIDの規格詳細を取得する
+      operationId: getFramework
+      parameters:
+        - $ref: '#/components/parameters/FrameworkId'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrameworkDetail'
+        '404':
+          description: 規格が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Framework
+      summary: 規格更新
+      description: 指定したIDの規格を更新する
+      operationId: updateFramework
+      parameters:
+        - $ref: '#/components/parameters/FrameworkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFrameworkRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrameworkDetail'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 規格が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Framework
+      summary: 規格削除
+      description: 指定したIDの規格を削除する
+      operationId: deleteFramework
+      parameters:
+        - $ref: '#/components/parameters/FrameworkId'
+      responses:
+        '204':
+          description: 削除成功
+        '404':
+          description: 規格が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /frameworks/{id}/versions:
+    post:
+      tags:
+        - Framework
+      summary: 版作成
+      description: 指定した規格に新しい版を作成する
+      operationId: createVersion
+      parameters:
+        - $ref: '#/components/parameters/FrameworkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVersionRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionIdResponse'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 規格が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /frameworks/versions/{versionId}/activate:
+    post:
+      tags:
+        - Framework
+      summary: 版のアクティベート
+      description: 指定した版のステータスをACTIVEに変更する
+      operationId: activateVersion
+      parameters:
+        - $ref: '#/components/parameters/VersionId'
+      responses:
+        '204':
+          description: アクティベート成功
+        '404':
+          description: 版が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    FrameworkId:
+      name: id
+      in: path
+      required: true
+      description: 規格ID
+      schema:
+        type: string
+        format: uuid
+
+    VersionId:
+      name: versionId
+      in: path
+      required: true
+      description: 版ID
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    # ========================================
+    # Request Models
+    # ========================================
+    CreateFrameworkRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: 規格名
+          example: SOC2
+        description:
+          type: string
+          maxLength: 1000
+          description: 規格の説明
+          example: Service Organization Control 2
+
+    UpdateFrameworkRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: 規格名
+          example: SOC2
+        description:
+          type: string
+          maxLength: 1000
+          description: 規格の説明
+          example: Service Organization Control 2
+
+    CreateVersionRequest:
+      type: object
+      required:
+        - versionNumber
+      properties:
+        versionNumber:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: 版番号
+          example: "2024"
+        effectiveDate:
+          type: string
+          format: date
+          description: 発効日
+          example: "2024-01-01"
+
+    # ========================================
+    # Response Models
+    # ========================================
+    FrameworkIdResponse:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 作成された規格のID
+
+    VersionIdResponse:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 作成された版のID
+
+    FrameworkSummary:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 規格ID
+        name:
+          type: string
+          description: 規格名
+        description:
+          type: string
+          description: 規格の説明
+
+    FrameworkDetail:
+      type: object
+      required:
+        - id
+        - name
+        - versions
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 規格ID
+        name:
+          type: string
+          description: 規格名
+        description:
+          type: string
+          description: 規格の説明
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrameworkVersionSummary'
+
+    FrameworkVersionSummary:
+      type: object
+      required:
+        - id
+        - versionNumber
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 版ID
+        versionNumber:
+          type: string
+          description: 版番号
+        status:
+          $ref: '#/components/schemas/VersionStatus'
+        effectiveDate:
+          type: string
+          format: date
+          description: 発効日
+
+    VersionStatus:
+      type: string
+      enum:
+        - DRAFT
+        - ACTIVE
+        - ARCHIVED
+      description: |
+        版のステータス
+        - DRAFT: 下書き（編集可能）
+        - ACTIVE: 有効（運用中）
+        - ARCHIVED: アーカイブ（過去版）
+
+    # ========================================
+    # Error Response
+    # ========================================
+    ErrorResponse:
+      type: object
+      required:
+        - timestamp
+        - status
+        - error
+        - message
+        - path
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: エラー発生日時
+        status:
+          type: integer
+          description: HTTPステータスコード
+        error:
+          type: string
+          description: エラー種別
+        message:
+          type: string
+          description: エラーメッセージ
+        path:
+          type: string
+          description: リクエストパス
